@@ -1,0 +1,97 @@
+import os
+
+# ---------- USER INPUT ----------
+input_fasta = input("Enter path to FASTA file: ").strip().strip('"')
+output_folder = r"C:\Users\sahaa\Downloads\Study Materials\Bioinformatics Notes\Project\Data\Data for AMP"
+output_file = os.path.join(output_folder, "filtered_peptides.fasta")
+
+# ---------- SETTINGS ----------
+MIN_LEN = 6
+MAX_LEN = 20   # Increased from 15
+
+ACIDIC = set("DE")
+HYDROPHOBIC = set("FWYLIV")
+POLAR = set("NQKRDEST")
+HBOND = set("NQSTDE")
+POSITIVE = set("KR")
+
+MIN_ACIDIC_PERCENT = 0.15      # Reduced from 0.20
+MAX_POSITIVE_PERCENT = 0.50    # Relaxed from 0.40
+MAX_HYDROPHOBIC_STRETCH = 6    # Relaxed from 5
+
+# ---------- FUNCTIONS ----------
+def parse_fasta(file_path):
+    sequences = []
+    header = None
+    seq = []
+
+    with open(file_path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if header:
+                    sequences.append((header, "".join(seq)))
+                header = line
+                seq = []
+            else:
+                seq.append(line)
+
+        if header:
+            sequences.append((header, "".join(seq)))
+
+    return sequences
+
+
+def passes_filters(seq):
+    length = len(seq)
+
+    # Length filter
+    if length < MIN_LEN or length > MAX_LEN:
+        return False
+
+    # Acidic content ≥15%
+    acidic_ratio = sum(aa in ACIDIC for aa in seq) / length
+    if acidic_ratio < MIN_ACIDIC_PERCENT:
+        return False
+
+    # Amphipathic nature
+    if not any(a in HYDROPHOBIC for a in seq):
+        return False
+    if not any(a in POLAR for a in seq):
+        return False
+
+    # Hydrogen bonding potential
+    if not any(a in HBOND for a in seq):
+        return False
+
+    # Avoid highly positive peptides (>50% K/R)
+    positive_ratio = sum(a in POSITIVE for a in seq) / length
+    if positive_ratio > MAX_POSITIVE_PERCENT:
+        return False
+
+    # Avoid long hydrophobic runs
+    for i in range(len(seq) - MAX_HYDROPHOBIC_STRETCH + 1):
+        if all(a in HYDROPHOBIC for a in seq[i:i+MAX_HYDROPHOBIC_STRETCH]):
+            return False
+
+    return True
+
+
+# ---------- MAIN ----------
+os.makedirs(output_folder, exist_ok=True)
+
+sequences = parse_fasta(input_fasta)
+
+selected = []
+for header, seq in sequences:
+    if passes_filters(seq):
+        selected.append((header, seq))
+
+with open(output_file, "w") as out:
+    for header, seq in selected:
+        out.write(header + "\n")
+        out.write(seq + "\n")
+
+print("Total sequences:", len(sequences))
+print("Selected peptides:", len(selected))
+print("Results saved to:", output_file)
